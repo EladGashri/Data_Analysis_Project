@@ -1,0 +1,319 @@
+---
+title: "Project in Intro to Statistics and Data Analysis with R"
+output: html_document
+---
+
+Name : Elad Gashri\
+ID :304996333
+
+
+**Data Tidyng**
+
+In this project I will analysize the 'FIFA_20' dataset. This dataset cointains data about all the players in the football simulation video game 'FIFA 20'. Firstly, I will tidy the data. I will remove all unnecessary variables and change the names of some variables to make them more clear.
+
+```{r , include=FALSE}
+
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(scales)
+library(car)
+
+```
+
+```{r, results='markup'}
+
+fifa<-read.csv("FIFA_20.CSV")  %>%
+  rename(id=sofifa_id)  %>%
+  rename(current_points=overall)  %>% 
+  rename(potential_points=potential)  %>%
+  select(id:international_reputation, -player_url)
+
+```
+
+**First Hypotesis**
+
+I hypothesise that the value of attack players is larger than that of defence players. In order to test this hypothesis I will run a t test with players who play in the 'striker' position (marked as 'ST' in the dataset) and players who play in the 'centre back' position (marked as 'CB' in the dataset).\
+
+I will build 2 new datasets from the current 'fifa' dataset. In the dataset 'fifa' the variable 'player positions' mentions all the possible positions the player can play at. all the players who play at the 'striker' position will be put in the 'ST' dataset. All the players whp play at the 'centre Back' will be put in the 'CB' dataset. Since both of these are opossite positions played at the opposite places on the feild, it is unlikely that there are many players who can play at both of these positions. I will filter those who do out of the datasets.\
+
+
+H0: μ value of striker = μ value of centre back\
+H1: μ value of striker > μ value of centre back
+
+
+
+```{r, results='markup', warning=FALSE}
+
+ST<-filter(fifa,grepl("ST",player_positions))
+
+CB<-filter(fifa,grepl("CB",player_positions))
+
+ST<-filter(ST,!grepl("CB",player_positions))
+
+CB<-filter(CB,!grepl("ST",player_positions))
+
+t.test(x=ST$value_eur,y=CB$value_eur,alternative="greater", var.equal=FALSE)
+
+```
+Since α>p-value H0 has been rejected, meaning players in the 'striker' position have a highter value than players who play in the 'centre Back' position.\
+In order to demonstrate the diffrence that have been found in the t test I will plot the distributions of both of these variables next to each other.
+
+```{r, results='hide', warning=FALSE}
+
+ST$position<-"Striker"
+
+CB$position<-"Centre Back"
+
+ST_and_CB<-rbind(ST,CB)
+
+ggplot(data=ST_and_CB,aes(x=value_eur,color=position))+
+  geom_density()+
+  scale_x_log10(breaks = trans_breaks("log10", function(x) 10^x), labels = trans_format("log10", math_format(10^.x))) +
+  labs(title="Distribution of Value",x="Value (€)",y="Distribution")+
+  theme_bw()    
+ 
+```
+\
+
+The assumption needed for a t test is that the 2 groups are normally distributed. I will test this assumption using the goodness of fit test.\
+
+Goodness of Fit Test for ST:
+
+```{r, results='markup', warning=FALSE}
+
+ST_mu<-mean(ST$value_eur)
+
+ST_sigma<-sd(ST$value_eur)
+
+ST_diff<-(median(ST$value_eur))/3
+
+ST_intervals<-c(0,0,0,0,0,0)
+
+for (i in 0:5)
+  ST_intervals[i+1]<-ST_diff*i
+
+ST_bins<-cut(ST$value_eur,breaks=ST_intervals)
+
+ST_observed<-table(ST_bins)
+
+ST_upper<-ST_intervals[-1]
+
+ST_lower<-ST_intervals[1:5]
+
+ST_expected<-pnorm(q=ST_upper,mean=ST_mu,sd=ST_sigma)-pnorm(q=ST_lower,mean=ST_mu,sd=ST_sigma)
+
+ST_expected<-ST_expected/sum(ST_expected)
+
+chisq.test(x=ST_observed,p=ST_expected)
+
+
+```
+Goodness of Fit Test for CB:
+
+```{r, results='markup', warning=FALSE}
+
+CB_mu<-mean(CB$value_eur)
+
+CB_sigma<-sd(CB$value_eur)
+
+CB_diff<-(median(CB$value_eur))/3
+
+CB_intervals<-c(0,0,0,0,0,0)
+
+for (i in 0:5)
+  CB_intervals[i+1]<-CB_diff*i
+
+CB_bins<-cut(CB$value_eur,breaks=CB_intervals)
+
+CB_observed<-table(CB_bins)
+
+CB_upper<-CB_intervals[-1]
+
+CB_lower<-CB_intervals[1:5]
+
+CB_expected<-pnorm(q=CB_upper,mean=CB_mu,sd=CB_sigma)-pnorm(q=CB_lower,mean=CB_mu,sd=CB_sigma)
+
+CB_expected<-CB_expected/sum(CB_expected)
+
+chisq.test(x=CB_observed,p=CB_expected)
+
+```
+
+In both cases, α>p-value, meaning H0 has bean rejected. Both populations are not normally distributed. The assumption for the t test is not correct.\
+
+**Second Hypotesis**
+
+For this hypothesis I will create a new variable in the dataset 'fifa'. This variable is the diffrence between the 'potential points' variable and the 'current points' variable. The new variable will be called 'total potential'.\
+I hypothesise that there is a negative linear relationship between the 'total potential' variable and the 'age' variable. The younger a player is, he has more time to get to his full potential, so the diffrence between his potential points and currents points sould be larger than that of an older player. In order to check this hypothesis I will use simple linear regression.
+
+```{r, results='markup'}
+
+fifa$total_potential<-fifa$potential_points-fifa$current_points
+
+potential_age_lm<-lm(age~total_potential,data=fifa)
+
+summary(potential_age_lm)
+
+```
+The linear relationship is significant with the the coefficients β0 = 29.162 and β1 = -0.731.\ 
+I will plot the variable 'total_potential' and the variable 'age' together to see excacley how the linear relationship looks.
+
+
+```{r, results='markup', warning=FALSE}
+
+ggplot(data=fifa, mapping=aes(x=age,y=total_potential))+
+  geom_point() +
+  stat_smooth(method = "lm") +
+  ylim(0,30) +
+  labs(title="Total Potential and Age Linear Relationship", x="Age", y="Total Potential")
+       
+       
+```
+\
+From the graph it is easy to see that there is a negative linear relationship between the 2 variables. As i hypothesized, the younger the player is, the more diffrence there is between his 'potential points' and his 'current points'.\
+
+The assumptions needed for a simple linear regression are error normally distributed with expected value of 0 and homoscedastity.\
+
+In order to test the assumption that the error is normally distributed I will use the goodness of fit test:
+
+```{r, results='markup', warning=FALSE}
+beta_0 <- 29.162
+
+beta_1 <- -0.731
+
+fifa$fitted_value<-beta_0+beta_1*fifa$age
+
+fifa$error<-fifa$total_potential - fifa$fitted_value
+
+e_mu<-mean(fifa$error)
+
+e_sigma<-sd(fifa$error)
+
+e_diff<-(median(fifa$error))/3
+
+e_intervals<-c(0,0,0,0,0,0)
+
+for (i in 0:5)
+  e_intervals[i+1]<-e_diff*i
+
+e_bins<-cut(fifa$error,breaks=e_intervals)
+
+e_observed<-table(e_bins)
+
+e_upper<-e_intervals[-1]
+
+e_lower<-e_intervals[1:5]
+
+e_expected<-pnorm(q=e_upper,mean=e_mu,sd=e_sigma)-pnorm(q=e_lower,mean=e_mu,sd=e_sigma)
+
+e_expected<-e_expected/sum(e_expected)
+
+chisq.test(x=e_observed,p=e_expected)
+
+```
+α>p-value, meaning H0 has been rejected. The error isn't normally distributed. This assumption is not correct.\
+
+In order to test the assumption that the error has an expected value of 0, I will use a t test:
+
+```{r, results='markup'}
+
+ t.test(x = fifa$error, alternative = "two.sided", mu = 0)
+
+```
+α>p-value, meaning H0 has been rejected. The error has an expected value that is diffrent from 0. This assumption is not correct.\
+
+The assumption for homoscedasticity will be checked graphically:
+
+
+```{r, results='markup'}
+
+ggplot(data=fifa, mapping=aes(x=age,y=error))+
+  geom_point() +
+  geom_hline(yintercept=0)+
+  labs(title="Residuals Homoscedasticity Check", x="X", y="Residuals")
+
+```
+\
+The graph clearly shows that the assumption for homoscedasticity is not correct since the residuals don't disperse evenly.\
+\
+**Third Hypotesis**\
+I hypothesize that There is a significant diffrence between the abilities of players from diffrent countries. The Variable 'current points' shows the ability of a player on a scale from 1 to 100.  In order to test that, I will firstly check what are the 5 countries that have the most player on the 'fifa' dataset. Then, using a single factor analysis of variance test, I will check whether there is a significant diffrence between the means of the 'current points' variable for players from each of these countries. I am using the analysis of variance test because there are more than 2 levels.
+
+H0: μ ability of country 1 =... = μ ability of country 5\
+H1: μ ability of country 1 ≠ μ ability of country 2 or ... or μ ability of country 4 ≠ μ ability of country 5
+
+
+```{r, results='markup'}
+
+most_freq_countries<-names(sort(table(fifa$nationality),decreasing=TRUE)[1:5])
+
+countries<-filter(fifa,nationality %in% most_freq_countries)
+
+countries$nat_fac<-factor(countries$nationality)
+
+countries_anova<-aov(formula=current_points~nat_fac, data=countries)
+
+summary(countries_anova)
+```
+Since α>p-value H0 has been rejected, meaning there is a diffrence between the ability of players from diffrent countries.\
+I will use Tukey's honestly significant difference test the check the diffrence between all the means.
+
+```{r, results='markup'}
+
+TukeyHSD(countries_anova)
+
+```
+
+I will use a box plot to see that diffrence between the ability of players from diffrent countries.
+
+```{r, results='hide'}
+
+ggplot(countries, aes(x= nat_fac, y = current_points )) +
+  geom_boxplot() +
+  theme_bw()+
+  labs(title="Ability of Players from Diffrent Countries", x="Countries", y="Ability")
+
+
+```
+\
+The assumptions needed for a single factor analysis of variance test are normally distributed observations and homogeneity of Variances.
+
+In order to test the assumption that the observations are distributed normally I will the use goodness of fit test:
+
+```{r, results='markup', warning=FALSE}
+P_mu<-mean(countries$current_points)
+
+P_sigma<-sd(countries$current_points)
+
+P_diff<-(median(countries$current_points))/3
+
+P_intervals<-c(0,0,0,0,0,0)
+
+for (i in 0:5)
+  P_intervals[i+1]<-P_diff*i
+
+P_bins<-cut(countries$current_points,breaks=P_intervals)
+
+P_observed<-table(P_bins)
+
+P_upper<-P_intervals[-1]
+
+P_lower<-P_intervals[1:5]
+
+P_expected<-pnorm(q=P_upper,mean=P_mu,sd=P_sigma)-pnorm(q=P_lower,mean=P_mu,sd=P_sigma)
+
+P_expected<-P_expected/sum(P_expected)
+
+chisq.test(x=P_observed,p=P_expected)
+
+```
+α>p-value, meaning H0 has bean rejected. The observations are not normally distributed. This assumption is not correct.\
+
+In order to test the homogeneity of variances assumption I will use Levene's test. Since there are more than 2 levels, a F test cannot be used.
+
+```{r, results='markup'}
+leveneTest(current_points~nat_fac,data=countries)
+```
+α>p-value, meaning H0 has bean rejected. The groups do not have equal variances. The assumption of homogeneity of Variances is not correct.
+
