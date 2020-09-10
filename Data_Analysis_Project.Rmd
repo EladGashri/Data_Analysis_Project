@@ -1,5 +1,5 @@
 ---
-title: "Project in Intro to Statistics and Data Analysis with R"
+title: "Data Analysis Project"
 output: html_document
 ---
 
